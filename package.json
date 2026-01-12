@@ -1,0 +1,27 @@
+{
+    "name": "autosubtitlesapp",
+    "version": "1.0.0",
+    "description": "Auto subtitle generation, translation, and video rendering application",
+    "scripts": {
+        "start": "concurrently \"npm run server\" \"npm run client\"",
+        "server": "cd server && nodemon index.js",
+        "client": "cd client && npm start",
+        "install-all": "npm install && cd client && npm install && cd ../server && npm install",
+        "build": "cd client && npm run build && rimraf server/public && xcopy /E /I /Y client\\build server\\public"
+    },
+    "keywords": [
+        "subtitles",
+        "video",
+        "ai",
+        "translation"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "concurrently": "^8.2.2",
+        "dotenv": "^16.3.1"
+    },
+    "devDependencies": {
+        "rimraf": "^5.0.5"
+    }
+}

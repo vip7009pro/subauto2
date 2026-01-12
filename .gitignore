@@ -1,0 +1,31 @@
+# Node modules
+node_modules
+
+# Environment
+.env
+
+# Builds
+build
+dist
+client/build
+
+# Temp files
+*.log
+tmp/
+uploads/
+server/uploads/
+server/public/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Misc
+.cache
