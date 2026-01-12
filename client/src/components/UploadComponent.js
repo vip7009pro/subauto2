@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
+import api from '../api/config';
 import {
   Paper,
   Typography,
@@ -30,7 +30,7 @@ const UploadComponent = ({ onUploadComplete }) => {
     setUploadProgress(0);
 
     try {
-      const response = await axios.post('/api/upload', formData, {
+      const response = await api.post('/api/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -57,7 +57,7 @@ const UploadComponent = ({ onUploadComplete }) => {
       'video/*': ['.mp4', '.avi', '.mov', '.mkv', '.webm']
     },
     maxFiles: 1,
-    maxSize: 104857600, // 100MB
+    maxSize: 5368709120, // 5GB
     disabled: uploading
   });
 
@@ -118,7 +118,7 @@ const UploadComponent = ({ onUploadComplete }) => {
                   Browse Files
                 </Button>
                 <Typography variant="caption" display="block" sx={{ mt: 2 }} color="text.secondary">
-                  Supported formats: MP4, AVI, MOV, MKV, WebM (Max 100MB)
+                  Supported formats: MP4, AVI, MOV, MKV, WebM (Max 5GB)
                 </Typography>
               </>
             )}

@@ -429,4 +429,40 @@ router.get('/job/:jobId', (req, res) => {
   }
 });
 
+// Export subtitles
+router.post('/export-subs', (req, res) => {
+  try {
+    const { subtitles, format } = req.body;
+    
+    if (!subtitles || !Array.isArray(subtitles)) {
+      return res.status(400).json({ error: 'Invalid subtitles data' });
+    }
+
+    let content = '';
+    let contentType = 'text/plain';
+    let extension = 'txt';
+
+    if (format === 'srt') {
+      content = toSRT(subtitles);
+      contentType = 'application/x-subrip';
+      extension = 'srt';
+    } else if (format === 'ass') {
+      content = toASS(subtitles);
+      contentType = 'text/x-ass';
+      extension = 'ass';
+    } else {
+      return res.status(400).json({ error: 'Unsupported format' });
+    }
+
+    res.json({
+      content,
+      filename: `subtitles.${extension}`,
+      type: contentType
+    });
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ error: 'Failed to export subtitles' });
+  }
+});
+
 module.exports = router;

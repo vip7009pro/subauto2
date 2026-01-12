@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api, { API_URL } from '../api/config';
 import {
   Paper,
   Typography,
@@ -132,37 +132,69 @@ const SubtitleEditor = ({
 
   useEffect(() => {
     // Initialize Video.js player
-    if (videoRef.current && !playerRef.current) {
-      playerRef.current = videojs(videoRef.current, {
-        controls: true,
-        fluid: true,
-        preload: 'auto',
-        textTrackSettings: false // Disable default caption settings UI
-      });
+    const initPlayer = () => {
+        // Double check ref exists and is in DOM
+        if (videoRef.current && !playerRef.current && document.body.contains(videoRef.current)) {
+            console.log('Initializing Video.js player...');
+            playerRef.current = videojs(videoRef.current, {
+                controls: true,
+                fluid: true,
+                preload: 'auto',
+                textTrackSettings: false,
+                sources: videoData ? [{
+                    src: `${API_URL}/downloads/${videoData.videoPath}`,
+                    type: 'video/mp4'
+                }] : []
+            });
 
-      // Track time updates
-      playerRef.current.on('timeupdate', () => {
-        setCurrentTime(playerRef.current.currentTime());
-      });
+            // Track time updates
+            playerRef.current.on('timeupdate', () => {
+                setCurrentTime(playerRef.current.currentTime());
+            });
 
-      playerRef.current.on('loadedmetadata', () => {
-        setDuration(playerRef.current.duration());
-      });
-    }
+            playerRef.current.on('loadedmetadata', () => {
+                setDuration(playerRef.current.duration());
+            });
+            
+            playerRef.current.on('error', () => {
+                console.error('Video.js Error:', playerRef.current.error());
+            });
+        }
+    };
+
+    // Small timeout to ensure DOM is ready in some edge cases
+    const timer = setTimeout(initPlayer, 100);
 
     return () => {
+      clearTimeout(timer);
       if (playerRef.current) {
         playerRef.current.dispose();
         playerRef.current = null;
       }
     };
-  }, []);
+  }, []); // Depend on [] to run only once on mount, using ref logic internally
 
-  // Update video source when videoData changes
+  // Update video source when videoData changes (if player already exists)
+  useEffect(() => {
+    if (playerRef.current && videoData) {
+      const currentSrc = playerRef.current.currentSrc();
+      const newSrc = `${API_URL}/downloads/${videoData.videoPath}`;
+      
+      // Only update if source changed
+      if (!currentSrc || !currentSrc.endsWith(videoData.videoPath)) {
+          playerRef.current.src({
+            src: newSrc,
+            type: 'video/mp4'
+          });
+      }
+    }
+  }, [videoData]);
+
+  // Update video source when videoData changes (if player already exists)
   useEffect(() => {
     if (playerRef.current && videoData) {
       playerRef.current.src({
-        src: `/downloads/${videoData.videoPath}`,
+        src: `${API_URL}/downloads/${videoData.videoPath}`,
         type: 'video/mp4'
       });
     }
@@ -183,7 +215,7 @@ const SubtitleEditor = ({
     setError(null);
 
     try {
-      const response = await axios.post('/api/generate-subs', {
+      const response = await api.post('/api/generate-subs', {
         jobId,
         language: sourceLang === 'auto' ? null : sourceLang,
         model: selectedModel
@@ -210,7 +242,7 @@ const SubtitleEditor = ({
     setError(null);
 
     try {
-      const response = await axios.post('/api/translate', {
+      const response = await api.post('/api/translate', {
         jobId,
         targetLanguage: targetLang,
         subtitles: localSubtitles
@@ -285,6 +317,16 @@ const SubtitleEditor = ({
     }
   };
 
+  const handleClearSubtitles = () => {
+    if (window.confirm('Are you sure you want to clear all subtitles? This cannot be undone.')) {
+      setLocalSubtitles([]);
+      onSubtitlesUpdated([]);
+      setSelectedSubIndex(null);
+      // Reset localStorage for subtitles specifically
+      localStorage.removeItem('subauto_subtitles');
+    }
+  };
+
   const handleSeekToSubtitle = (index) => {
     if (playerRef.current) {
       const time = parseFloat(localSubtitles[index].start);
@@ -302,7 +344,7 @@ const SubtitleEditor = ({
 
   const handleSaveSubtitles = async () => {
     try {
-      await axios.post('/api/update-subs', {
+      await api.post('/api/update-subs', {
         jobId,
         subtitles: localSubtitles
       });
@@ -310,6 +352,32 @@ const SubtitleEditor = ({
     } catch (err) {
       console.error('Save error:', err);
       setError(err.response?.data?.error || 'Failed to save subtitles');
+    }
+  };
+
+  const handleExport = async (format) => {
+    if (localSubtitles.length === 0) return;
+    try {
+        const response = await api.post('/api/export-subs', {
+            subtitles: localSubtitles,
+            format
+        });
+        
+        const { content, filename, type } = response.data;
+        
+        // Create blob and trigger download
+        const blob = new Blob([content], { type });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (err) {
+        console.error('Export error:', err);
+        setError('Failed to export subtitles');
     }
   };
 
@@ -324,14 +392,15 @@ const SubtitleEditor = ({
 
     try {
       // First save the subtitles
-      await axios.post('/api/update-subs', {
+      await api.post('/api/update-subs', {
         jobId,
         subtitles: localSubtitles
       });
 
       // Then render
-      const response = await axios.post('/api/render', { jobId });
-      onRenderComplete(response.data.downloadUrl);
+      const response = await api.post('/api/render', { jobId });
+      const downloadUrl = response.data.downloadUrl;
+      onRenderComplete(`${API_URL}${downloadUrl}`);
     } catch (err) {
       console.error('Render error:', err);
       setError(err.response?.data?.error || 'Failed to render video');
@@ -468,137 +537,18 @@ const SubtitleEditor = ({
         </Alert>
       )}
 
-      {/* Video Player Container */}
-      <Box sx={{ position: 'relative', mb: 1 }}>
-        <Box sx={{ bgcolor: 'black', borderRadius: 1, overflow: 'hidden' }}>
-          <video
-            ref={videoRef}
-            className="video-js vjs-default-skin vjs-big-play-centered"
-            controls
-            preload="auto"
-            style={{ width: '100%', height: 'auto' }}
-          >
-            {/* Custom overlay handles subtitles */}
-          </video>
-        </Box>
-        
-        <SubtitleOverlay 
-          currentTime={currentTime} 
-          subtitles={localSubtitles} 
-        />
-      </Box>
-      
-      {/* Timeline */}
-      {videoData && (
-        <Timeline 
-          duration={duration || videoData.duration} 
-          subtitles={localSubtitles} 
-          currentTime={currentTime}
-          onSeek={handleTimelineSeek}
-          hoverTime={hoverTime}
-        />
-      )}
-
-      {/* Subtitle List & Editor - Compact Layout */}
-      {localSubtitles.length > 0 && (
-        <>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              Subtitle List ({localSubtitles.length})
-            </Typography>
-            <Box>
-              <Button size="small" startIcon={<AddIcon />} onClick={handleAddSubtitle}>Add New Line</Button>
-            </Box>
-          </Box>
-
-          <Grid container spacing={2}>
-            {/* Left: Compact List */}
-            <Grid item xs={12} md={7}>
-              <Box 
-                ref={subtitleListRef}
-                sx={{ 
-                  maxHeight: '400px', 
-                  overflowY: 'auto', 
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 1
-                }}
-              >
-                {localSubtitles.map((sub, index) => {
-                   const isActive = currentTime >= parseFloat(sub.start) && currentTime <= parseFloat(sub.end);
-                   const isSelected = selectedSubIndex === index;
-                   
-                   return (
-                    <Box
-                      key={index}
-                      sx={{
-                        p: 1,
-                        borderBottom: '1px solid rgba(255,255,255,0.05)',
-                        bgcolor: isSelected ? 'rgba(102, 126, 234, 0.2)' : (isActive ? 'rgba(102, 126, 234, 0.05)' : 'transparent'),
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1
-                      }}
-                      onClick={() => setSelectedSubIndex(index)}
-                      onMouseEnter={() => setHoverTime(parseFloat(sub.start))}
-                      onMouseLeave={() => setHoverTime(null)}
-                    >
-                      <Box sx={{ minWidth: 25, color: 'text.secondary', fontSize: '0.75rem', mr: 0.5 }}>
-                        {index + 1}
-                      </Box>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 100 }}>
-                        <TextField
-                          variant="standard"
-                          value={sub.start}
-                          onChange={(e) => handleSubtitleChange(index, 'start', e.target.value)}
-                          inputProps={{ style: { fontSize: '0.8rem', padding: 0 } }}
-                          InputProps={{ disableUnderline: true }}
-                          helperText={formatTime(parseFloat(sub.start))}
-                          FormHelperTextProps={{ style: { fontSize: '0.65rem' } }}
-                        />
-                        <TextField
-                          variant="standard"
-                          value={sub.end}
-                          onChange={(e) => handleSubtitleChange(index, 'end', e.target.value)}
-                          inputProps={{ style: { fontSize: '0.8rem', padding: 0, color: 'text.secondary' } }}
-                          InputProps={{ disableUnderline: true }}
-                          helperText={formatTime(parseFloat(sub.end))}
-                          FormHelperTextProps={{ style: { fontSize: '0.65rem' } }}
-                        />
-                      </Box>
-                      <TextField
-                        fullWidth
-                        multiline
-                        variant="standard"
-                        value={sub.text}
-                        onChange={(e) => handleSubtitleChange(index, 'text', e.target.value)}
-                        InputProps={{ disableUnderline: !isSelected }}
-                        sx={{ ml: 1 }}
-                      />
-                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                         <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSeekToSubtitle(index); }}>
-                            <PlayArrowIcon fontSize="small" />
-                         </IconButton>
-                         <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteSubtitle(index); }}>
-                            <DeleteIcon fontSize="small" />
-                         </IconButton>
-                      </Box>
-                    </Box>
-                   );
-                })}
-              </Box>
-            </Grid>
-
-            {/* Right: Style Editor & Actions (Fixed position or sticky could be better, but standard grid for now) */}
-            <Grid item xs={12} md={5}>
-              <Paper sx={{ p: 2, height: '400px', overflowY: 'auto' }}>
+      {/* Top Section: Style Editor (Left) & Video (Right) */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        {/* LEFT: Style Editor */}
+        <Grid item xs={12} md={4} sx={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
+            <Paper sx={{ p: 2, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <Typography variant="h6" gutterBottom>Style Editor</Typography>
                 {selectedSubIndex !== null ? (
                    <>
-                      <Typography variant="subtitle2" gutterBottom>
-                         Edit Style (Line {selectedSubIndex + 1})
+                      <Typography variant="subtitle2" gutterBottom color="text.secondary">
+                         Editing Line {selectedSubIndex + 1}
                       </Typography>
-                      <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+                      <Box sx={{ mb: 2 }}>
                         <Button 
                           size="small" 
                           variant="outlined" 
@@ -612,17 +562,166 @@ const SubtitleEditor = ({
                       <SubtitleStyleEditor
                         style={localSubtitles[selectedSubIndex].style}
                         onChange={(field, value) => handleSubtitleChange(selectedSubIndex, `style.${field}`, value)}
-                        compact={true} // Hint to make style editor smaller if implemented
+                        compact={true} 
                       />
                    </>
                 ) : (
-                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'text.secondary' }}>
-                      <Typography>Select a subtitle line to edit style</Typography>
+                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'text.secondary', flexDirection: 'column' }}>
+                      <MovieIcon sx={{ fontSize: 40, mb: 2, opacity: 0.5 }} />
+                      <Typography align="center">Select a subtitle from the list below<br/>to edit its style</Typography>
                    </Box>
                 )}
-              </Paper>
-            </Grid>
-          </Grid>
+            </Paper>
+        </Grid>
+
+        {/* RIGHT: Video Preview (Resizable) */}
+        <Grid item xs={12} md={8}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {/* Resizable Video Container */}
+                <Box 
+                    sx={{ 
+                        position: 'relative', 
+                        mb: 1, 
+                        resize: 'both', 
+                        overflow: 'hidden',
+                        maxWidth: '100%',
+                        minHeight: '300px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 1,
+                        bgcolor: 'black',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}
+                >
+                    <Box sx={{ flex: 1, position: 'relative', bgcolor: 'black', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <video
+                            ref={videoRef}
+                            className="video-js vjs-default-skin vjs-big-play-centered"
+                            controls
+                            preload="auto"
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        >
+                            {/* Custom overlay handles subtitles */}
+                        </video>
+                        <SubtitleOverlay 
+                        currentTime={currentTime} 
+                        subtitles={localSubtitles} 
+                        />
+                    </Box>
+                </Box>
+                
+                {/* Timeline */}
+                {videoData && (
+                    <Timeline 
+                    duration={duration || videoData.duration} 
+                    subtitles={localSubtitles} 
+                    currentTime={currentTime}
+                    onSeek={handleTimelineSeek}
+                    hoverTime={hoverTime}
+                    />
+                )}
+            </Box>
+        </Grid>
+      </Grid>
+
+      {/* Bottom Section: Subtitle List */}
+      {localSubtitles.length > 0 && (
+        <Paper sx={{ p: 2, flex: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              Subtitle List ({localSubtitles.length})
+            </Typography>
+            <Box>
+              <Button size="small" variant="outlined" onClick={() => handleExport('srt')} sx={{ mr: 1 }}>
+                Download .SRT
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => handleExport('ass')} sx={{ mr: 1 }}>
+                Download .ASS
+              </Button>
+              <Button size="small" color="error" onClick={handleClearSubtitles} sx={{ mr: 1 }}>
+                Clear All
+              </Button>
+              <Button size="small" startIcon={<AddIcon />} onClick={handleAddSubtitle}>Add New Line</Button>
+            </Box>
+          </Box>
+
+          <Box 
+            ref={subtitleListRef}
+            sx={{ 
+                height: '300px', // Fixed height for list
+                overflowY: 'auto', 
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 1
+            }}
+          >
+            {localSubtitles.map((sub, index) => {
+                const isActive = currentTime >= parseFloat(sub.start) && currentTime <= parseFloat(sub.end);
+                const isSelected = selectedSubIndex === index;
+                
+                return (
+                <Box
+                    key={index}
+                    sx={{
+                    p: 0.5,
+                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    bgcolor: isSelected ? 'rgba(76, 175, 80, 0.2)' : (isActive ? 'rgba(76, 175, 80, 0.05)' : 'transparent'),
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' },
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1
+                    }}
+                    onClick={() => setSelectedSubIndex(index)}
+                    onMouseEnter={() => setHoverTime(parseFloat(sub.start))}
+                    onMouseLeave={() => setHoverTime(null)}
+                >
+                    <Box sx={{ minWidth: 25, color: 'text.secondary', fontSize: '0.75rem', mr: 0.5 }}>
+                    {index + 1}
+                    </Box>
+                    
+                    {/* Compact Timestamp Row */}
+                    <Box sx={{ display: 'flex', gap: 1, minWidth: 160, alignItems: 'center' }}>
+                         <TextField
+                            variant="standard"
+                            value={sub.start}
+                            onChange={(e) => handleSubtitleChange(index, 'start', e.target.value)}
+                            inputProps={{ style: { fontSize: '0.8rem', padding: 0, width: '65px', textAlign: 'center' } }}
+                            InputProps={{ disableUnderline: true }}
+                            placeholder="0.000"
+                        />
+                        <Typography variant="body2" color="text.secondary">-</Typography>
+                        <TextField
+                            variant="standard"
+                            value={sub.end}
+                            onChange={(e) => handleSubtitleChange(index, 'end', e.target.value)}
+                            inputProps={{ style: { fontSize: '0.8rem', padding: 0, width: '65px', textAlign: 'center', color: 'text.secondary' } }}
+                            InputProps={{ disableUnderline: true }}
+                            placeholder="0.000"
+                        />
+                    </Box>
+
+                    <TextField
+                    fullWidth
+                    multiline
+                    variant="standard"
+                    value={sub.text}
+                    onChange={(e) => handleSubtitleChange(index, 'text', e.target.value)}
+                    InputProps={{ disableUnderline: !isSelected }}
+                    sx={{ ml: 1, '& .MuiInputBase-input': { padding: '2px 0' } }}
+                    />
+                    
+                    <Box sx={{ display: 'flex' }}>
+                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSeekToSubtitle(index); }}>
+                        <PlayArrowIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteSubtitle(index); }}>
+                        <DeleteIcon fontSize="small" />
+                        </IconButton>
+                    </Box>
+                </Box>
+                );
+            })}
+          </Box>
           
           <Box sx={{ mt: 3, display: 'flex', justifySelf: 'center', width: '100%' }}>
               <Button
@@ -637,7 +736,7 @@ const SubtitleEditor = ({
                 Render & Download Final Video
               </Button>
           </Box>
-        </>
+        </Paper>
       )}
 
       {rendering && (
