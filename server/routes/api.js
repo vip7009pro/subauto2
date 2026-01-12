@@ -234,20 +234,52 @@ router.post('/translate', async (req, res) => {
       return res.status(400).json({ error: 'No subtitles to translate' });
     }
 
-    // Translate each subtitle
+    console.log(`Translating ${subsToTranslate.length} subtitles to ${targetLanguage} in batches...`);
+
+    // Batch translation (Context-Aware)
+    // Group subtitles into chunks to provide context to the translator
+    // Using 50 lines per chunk or ~5000 chars max
+    const CHUNK_SIZE = 50; 
+    const batches = [];
+    
+    for (let i = 0; i < subsToTranslate.length; i += CHUNK_SIZE) {
+      batches.push(subsToTranslate.slice(i, i + CHUNK_SIZE));
+    }
+
     const translatedSubs = [];
     
-    for (const sub of subsToTranslate) {
+    for (const batch of batches) {
       try {
-        const result = await translate(sub.text, { to: targetLanguage });
-        translatedSubs.push({
-          ...sub,
-          text: result.text
+        // Join text with a delimiter not likely to be used in normal text
+        // Using " <<<BR>>> " as delimiter
+        const delimiter = " <<<BR>>> ";
+        const textToTranslate = batch.map(s => s.text).join(delimiter);
+        
+        const result = await translate(textToTranslate, { to: targetLanguage });
+        
+        // Split back
+        // Use regex to split, handling potential whitespace variations from translation
+        const translatedTexts = result.text.split(/\s*<<<BR>>>\s*/);
+
+        // Assign back to subtitles
+        batch.forEach((sub, index) => {
+          let transText = translatedTexts[index];
+          // Fallback if split count doesn't match (rare but possible)
+          if (!transText) transText = sub.text; 
+          
+          translatedSubs.push({
+            ...sub,
+            text: transText.trim()
+          });
         });
+        
+        // Add small delay to respect rate limits (if any)
+        await new Promise(r => setTimeout(r, 200));
+        
       } catch (err) {
-        console.error('Translation error for subtitle:', err);
-        // Keep original text if translation fails
-        translatedSubs.push(sub);
+        console.error('Batch translation error:', err);
+        // Fallback: keep original or try individual
+        batch.forEach(sub => translatedSubs.push(sub));
       }
     }
 

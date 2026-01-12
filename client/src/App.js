@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -51,6 +51,27 @@ function App() {
   const [subtitles, setSubtitles] = useState([]);
   const [renderUrl, setRenderUrl] = useState(null);
 
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    const savedJobId = localStorage.getItem('subauto_jobId');
+    const savedVideoData = localStorage.getItem('subauto_videoData');
+    const savedSubtitles = localStorage.getItem('subauto_subtitles');
+    const savedStep = localStorage.getItem('subauto_step');
+
+    if (savedJobId) setJobId(savedJobId);
+    if (savedVideoData) setVideoData(JSON.parse(savedVideoData));
+    if (savedSubtitles) setSubtitles(JSON.parse(savedSubtitles));
+    if (savedStep) setActiveStep(parseInt(savedStep, 10));
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    if (jobId) localStorage.setItem('subauto_jobId', jobId);
+    if (videoData) localStorage.setItem('subauto_videoData', JSON.stringify(videoData));
+    if (subtitles && subtitles.length > 0) localStorage.setItem('subauto_subtitles', JSON.stringify(subtitles));
+    localStorage.setItem('subauto_step', activeStep.toString());
+  }, [jobId, videoData, subtitles, activeStep]);
+
   const handleUploadComplete = (data) => {
     setJobId(data.jobId);
     setVideoData(data);
@@ -72,6 +93,12 @@ function App() {
     setVideoData(null);
     setSubtitles([]);
     setRenderUrl(null);
+    
+    // Clear localStorage
+    localStorage.removeItem('subauto_jobId');
+    localStorage.removeItem('subauto_videoData');
+    localStorage.removeItem('subauto_subtitles');
+    localStorage.removeItem('subauto_step');
   };
 
   return (

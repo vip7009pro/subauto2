@@ -342,6 +342,20 @@ const SubtitleEditor = ({
   // const formatTime = (seconds) => { ... } // Removed helper used in Tooltip to avoid duplication/unused var warning if not needed, or keep if used.
   // Actually, let's keep it inline or simple if used.
 
+  const [hoverTime, setHoverTime] = useState(null);
+
+  // Helper to format time as HH:mm:ss.SSS
+  const formatTime = (seconds) => {
+    if (isNaN(seconds)) return '00:00:00.000';
+    const date = new Date(0);
+    date.setUTCMilliseconds(seconds * 1000);
+    const hh = date.getUTCHours().toString().padStart(2, '0');
+    const mm = date.getUTCMinutes().toString().padStart(2, '0');
+    const ss = date.getUTCSeconds().toString().padStart(2, '0');
+    const ms = date.getUTCMilliseconds().toString().padStart(3, '0');
+    return `${hh}:${mm}:${ss}.${ms}`;
+  };
+
   return (
     <Paper elevation={3} sx={{ p: 4 }}>
       <Typography variant="h5" gutterBottom>
@@ -481,6 +495,7 @@ const SubtitleEditor = ({
           subtitles={localSubtitles} 
           currentTime={currentTime}
           onSeek={handleTimelineSeek}
+          hoverTime={hoverTime}
         />
       )}
 
@@ -526,17 +541,21 @@ const SubtitleEditor = ({
                         gap: 1
                       }}
                       onClick={() => setSelectedSubIndex(index)}
+                      onMouseEnter={() => setHoverTime(parseFloat(sub.start))}
+                      onMouseLeave={() => setHoverTime(null)}
                     >
-                      <Box sx={{ minWidth: 30, color: 'text.secondary', fontSize: '0.8rem' }}>
+                      <Box sx={{ minWidth: 25, color: 'text.secondary', fontSize: '0.75rem', mr: 0.5 }}>
                         {index + 1}
                       </Box>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 80 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 100 }}>
                         <TextField
                           variant="standard"
                           value={sub.start}
                           onChange={(e) => handleSubtitleChange(index, 'start', e.target.value)}
                           inputProps={{ style: { fontSize: '0.8rem', padding: 0 } }}
                           InputProps={{ disableUnderline: true }}
+                          helperText={formatTime(parseFloat(sub.start))}
+                          FormHelperTextProps={{ style: { fontSize: '0.65rem' } }}
                         />
                         <TextField
                           variant="standard"
@@ -544,6 +563,8 @@ const SubtitleEditor = ({
                           onChange={(e) => handleSubtitleChange(index, 'end', e.target.value)}
                           inputProps={{ style: { fontSize: '0.8rem', padding: 0, color: 'text.secondary' } }}
                           InputProps={{ disableUnderline: true }}
+                          helperText={formatTime(parseFloat(sub.end))}
+                          FormHelperTextProps={{ style: { fontSize: '0.65rem' } }}
                         />
                       </Box>
                       <TextField
@@ -555,7 +576,7 @@ const SubtitleEditor = ({
                         InputProps={{ disableUnderline: !isSelected }}
                         sx={{ ml: 1 }}
                       />
-                      <Box sx={{ display: 'flex' }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSeekToSubtitle(index); }}>
                             <PlayArrowIcon fontSize="small" />
                          </IconButton>

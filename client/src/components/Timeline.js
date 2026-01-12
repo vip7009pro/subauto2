@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Box, Typography, Tooltip } from '@mui/material';
 
-const Timeline = ({ duration, subtitles, currentTime, onSeek }) => {
+const Timeline = ({ duration, subtitles, currentTime, onSeek, hoverTime }) => {
   const containerRef = useRef(null);
 
   // Helper to convert time to percentage
@@ -50,6 +50,22 @@ const Timeline = ({ duration, subtitles, currentTime, onSeek }) => {
             transition: 'left 0.1s linear'
           }}
         />
+
+        {/* Ghost Playhead (Hover) */}
+        {hoverTime !== null && hoverTime >= 0 && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: `${timeToPercent(hoverTime)}%`,
+              top: 0,
+              bottom: 0,
+              width: 2,
+              bgcolor: 'rgba(255, 255, 255, 0.5)',
+              zIndex: 9,
+              pointerEvents: 'none'
+            }}
+          />
+        )}
 
         {/* Subtitle blocks */}
         {subtitles.map((sub, index) => {
