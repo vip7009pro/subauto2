@@ -49,6 +49,15 @@ cd subauto2
 ```bash
 npm run install-all
 ```
+Or manually:
+```bash
+npm install
+cd client
+npm install
+cd ../server
+npm install
+cd ..
+```
 
 3. Copy environment file:
 ```bash
@@ -59,6 +68,7 @@ copy .env.example .env
 ```bash
 npm start
 ```
+**Note:** The server uses `npx nodemon` which will automatically download nodemon on first run if not installed.
 
 The application will be available at:
 - Frontend: http://localhost:3000
