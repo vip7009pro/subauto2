@@ -97,7 +97,8 @@ router.post('/generate-subs', async (req, res) => {
     const audioPath = path.join(__dirname, '../uploads', `${uuidv4()}.wav`);
     await extractAudio(job.videoPath, audioPath);
 
-    console.log(`Generating subtitles for language: ${language || 'auto-detect'}`);
+    const modelName = req.body.model || 'Xenova/whisper-small';
+    console.log(`Generating subtitles using model: ${modelName} for language: ${language || 'auto-detect'}`);
 
     // Read WAV file data
     const { WaveFile } = require('wavefile');
@@ -129,9 +130,10 @@ router.post('/generate-subs', async (req, res) => {
     console.log(`Audio loaded: ${audioData.length} samples at ${sampleRate}Hz (Running Whisper...)`);
 
     // Use Whisper for transcription
+    console.log(`Loading Whisper model (${modelName})... this may take a moment`);
     const transcriber = await pipeline(
       'automatic-speech-recognition',
-      'Xenova/whisper-tiny'
+      modelName
     );
 
     const result = await transcriber(audioData, {

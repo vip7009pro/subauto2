@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Typography, Grid, TextField, Switch, FormControlLabel, Slider } from '@mui/material';
 import { ChromePicker } from 'react-color';
 
-const SubtitleStyleEditor = ({ style, onChange }) => {
+const SubtitleStyleEditor = ({ style, onChange, compact = false }) => {
   const [showTextColorPicker, setShowTextColorPicker] = React.useState(false);
   const [showBgColorPicker, setShowBgColorPicker] = React.useState(false);
   const [showStrokeColorPicker, setShowStrokeColorPicker] = React.useState(false);
@@ -179,37 +179,39 @@ const SubtitleStyleEditor = ({ style, onChange }) => {
         </Grid>
       </Grid>
 
-      {/* Preview */}
-      <Box sx={{ mt: 3, p: 2, bgcolor: 'black', borderRadius: 1, textAlign: 'center' }}>
-        <Typography variant="caption" display="block" gutterBottom color="text.secondary">
-          Preview
-        </Typography>
-        <Box
-          sx={{
-            display: 'inline-block',
-            px: style.bgOpaque ? 2 : 0,
-            py: style.bgOpaque ? 1 : 0,
-            bgcolor: style.bgOpaque ? style.bgColor : 'transparent',
-            opacity: style.bgOpaque ? style.bgOpacity : 1,
-          }}
-        >
-          <Typography
+      {/* Preview - Only show if NOT compact, since we have video overlay now */}
+      {!compact && (
+        <Box sx={{ mt: 3, p: 2, bgcolor: 'black', borderRadius: 1, textAlign: 'center' }}>
+          <Typography variant="caption" display="block" gutterBottom color="text.secondary">
+            Preview
+          </Typography>
+          <Box
             sx={{
-              color: style.textColor,
-              fontSize: `${(style.fontSize || 48) / 3}px`,
-              textShadow: `
-                -${style.strokeWidth}px -${style.strokeWidth}px 0 ${style.strokeColor},
-                ${style.strokeWidth}px -${style.strokeWidth}px 0 ${style.strokeColor},
-                -${style.strokeWidth}px ${style.strokeWidth}px 0 ${style.strokeColor},
-                ${style.strokeWidth}px ${style.strokeWidth}px 0 ${style.strokeColor}
-              `,
-              fontWeight: 'bold'
+              display: 'inline-block',
+              px: style.bgOpaque ? 2 : 0,
+              py: style.bgOpaque ? 1 : 0,
+              bgcolor: style.bgOpaque ? style.bgColor : 'transparent',
+              opacity: style.bgOpaque ? style.bgOpacity : 1,
             }}
           >
-            Sample Subtitle Text
-          </Typography>
+            <Typography
+              sx={{
+                color: style.textColor,
+                fontSize: `${(style.fontSize || 48) / 3}px`,
+                textShadow: `
+                  -${style.strokeWidth}px -${style.strokeWidth}px 0 ${style.strokeColor},
+                  ${style.strokeWidth}px -${style.strokeWidth}px 0 ${style.strokeColor},
+                  -${style.strokeWidth}px ${style.strokeWidth}px 0 ${style.strokeColor},
+                  ${style.strokeWidth}px ${style.strokeWidth}px 0 ${style.strokeColor}
+                `,
+                fontWeight: 'bold'
+              }}
+            >
+              Sample Subtitle Text
+            </Typography>
+          </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   );
 };
