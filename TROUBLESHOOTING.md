@@ -14,6 +14,18 @@
 **Nguyên nhân:** PowerShell trên Windows không hỗ trợ `&&` như bash  
 **Giải pháp:** Đã đổi sang dùng `&` cho Windows PowerShell
 
+### 4. Lỗi "AudioContext is not available in your environment"
+**Nguyên nhân:** Whisper AI không thể load audio file trực tiếp trong Node.js  
+**Giải pháp:** Đã sửa để đọc WAV file data và convert sang Float32Array trước khi pass vào Whisper pipeline. Sử dụng package `wavefile` để đọc audio data.
+
+### 5. Lỗi "Transcription result: chunks: []" (Không tạo được phụ đề)
+**Nguyên nhân:** Audio data đọc vào không được normalize về range [-1, 1] mà giữ nguyên giá trị 16-bit int (lớn), khiến AI tưởng là nhiễu hoặc silence.
+**Giải pháp:** Đã thêm bước `wav.toBitDepth('32f')` để chuẩn hóa audio data trước khi đưa vào model.
+
+### 6. Lỗi "TypeError: Cannot read properties of null (reading 'toFixed')"
+**Nguyên nhân:** Whisper đôi khi trả về chunks có text nhưng timestamp là `null` hoặc bị thiếu.
+**Giải pháp:** Đã thêm kiểm tra null cho timestamp và force kiểu dữ liệu `Number()` trước khi format. Nếu thiếu timestamp sẽ tự động tính toán dựa trên subtitle trước đó hoặc dùng giá trị mặc định.
+
 ## 🚀 Cách Chạy Đúng
 
 ```bash

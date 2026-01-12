@@ -99,13 +99,42 @@ router.post('/generate-subs', async (req, res) => {
 
     console.log(`Generating subtitles for language: ${language || 'auto-detect'}`);
 
+    // Read WAV file data
+    const { WaveFile } = require('wavefile');
+    const wavBuffer = fs.readFileSync(audioPath);
+    const wav = new WaveFile(wavBuffer);
+    
+    // Convert to 32-bit float (normalized to -1.0 to 1.0)
+    wav.toBitDepth('32f');
+    
+    // Get samples
+    let audioData = wav.getSamples(false, Float32Array);
+    
+    // Handle mono/stereo: if array of arrays (channels), take first channel
+    if (Array.isArray(audioData)) {
+      if (audioData.length > 0) {
+        audioData = audioData[0];
+      } else {
+        throw new Error('No audio channels found');
+      }
+    }
+    
+    // Ensure it's Float32Array
+    if (!(audioData instanceof Float32Array)) {
+      audioData = new Float32Array(audioData);
+    }
+    
+    const sampleRate = wav.fmt.sampleRate;
+
+    console.log(`Audio loaded: ${audioData.length} samples at ${sampleRate}Hz (Running Whisper...)`);
+
     // Use Whisper for transcription
     const transcriber = await pipeline(
       'automatic-speech-recognition',
       'Xenova/whisper-tiny'
     );
 
-    const result = await transcriber(audioPath, {
+    const result = await transcriber(audioData, {
       language: language && language !== 'auto' ? language : null,
       task: 'transcribe',
       chunk_length_s: 30,
@@ -116,15 +145,26 @@ router.post('/generate-subs', async (req, res) => {
     // Clean up audio file
     fs.unlinkSync(audioPath);
 
+    console.log('Transcription result:', result);
+
     // Convert Whisper output to subtitle format
     const subtitles = [];
     
     if (result.chunks && result.chunks.length > 0) {
       result.chunks.forEach((chunk, index) => {
-        if (chunk.timestamp && chunk.text) {
+        if (chunk.text && chunk.text.trim()) {
+          // Handle potentially null timestamps
+          const start = chunk.timestamp && chunk.timestamp[0] !== null 
+            ? chunk.timestamp[0] 
+            : (index > 0 ? subtitles[index-1].end : 0);
+            
+          const end = chunk.timestamp && chunk.timestamp[1] !== null 
+            ? chunk.timestamp[1] 
+            : start + 2; // Default duration 2s if missing
+
           subtitles.push({
-            start: chunk.timestamp[0].toFixed(3),
-            end: chunk.timestamp[1].toFixed(3),
+            start: Number(start).toFixed(3),
+            end: Number(end).toFixed(3),
             text: chunk.text.trim(),
             style: {
               textColor: '#FFFFFF',
