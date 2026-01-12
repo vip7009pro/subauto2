@@ -327,14 +327,8 @@ const SubtitleEditor = ({
     }
   };
 
-  const handleSeekToSubtitle = (index) => {
-    if (playerRef.current) {
-      const time = parseFloat(localSubtitles[index].start);
-      playerRef.current.currentTime(time);
-      playerRef.current.play();
-    }
-    setSelectedSubIndex(index);
-  };
+  // Removed duplicate handleSeekToSubtitle
+
 
   const handleTimelineSeek = (time) => {
     if (playerRef.current) {
@@ -408,8 +402,6 @@ const SubtitleEditor = ({
     }
   };
 
-  // const formatTime = (seconds) => { ... } // Removed helper used in Tooltip to avoid duplication/unused var warning if not needed, or keep if used.
-  // Actually, let's keep it inline or simple if used.
 
   const [hoverTime, setHoverTime] = useState(null);
 
@@ -423,6 +415,44 @@ const SubtitleEditor = ({
     const ss = date.getUTCSeconds().toString().padStart(2, '0');
     const ms = date.getUTCMilliseconds().toString().padStart(3, '0');
     return `${hh}:${mm}:${ss}.${ms}`;
+  };
+
+  // Helper to parse HH:mm:ss.SSS to seconds
+  const parseTime = (timeString) => {
+    if (typeof timeString === 'number') return timeString;
+    if (!timeString) return 0;
+    // If it's just a number (seconds), return it
+    if (!timeString.includes(':')) return parseFloat(timeString);
+
+    const parts = timeString.split(':');
+    let seconds = 0;
+    if (parts.length === 3) {
+      seconds += parseInt(parts[0]) * 3600;
+      seconds += parseInt(parts[1]) * 60;
+      seconds += parseFloat(parts[2]);
+    } else if (parts.length === 2) {
+      seconds += parseInt(parts[0]) * 60;
+      seconds += parseFloat(parts[1]);
+    }
+    return seconds;
+  };
+
+  const handleSeekToSubtitle = (index) => {
+    if (playerRef.current) {
+      const time = parseTime(localSubtitles[index].start);
+      playerRef.current.currentTime(time);
+      playerRef.current.play();
+    }
+    setSelectedSubIndex(index);
+  };
+  
+  // Custom handler for row click (Just Seek, Don't Force Play)
+  const handleRowClick = (index) => {
+      if (playerRef.current) {
+        const time = parseTime(localSubtitles[index].start);
+        playerRef.current.currentTime(time);
+      }
+      setSelectedSubIndex(index);
   };
 
   return (
@@ -671,7 +701,7 @@ const SubtitleEditor = ({
                     alignItems: 'center',
                     gap: 1
                     }}
-                    onClick={() => setSelectedSubIndex(index)}
+                    onClick={() => handleRowClick(index)}
                     onMouseEnter={() => setHoverTime(parseFloat(sub.start))}
                     onMouseLeave={() => setHoverTime(null)}
                 >
