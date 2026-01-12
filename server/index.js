@@ -47,7 +47,7 @@ app.get('*', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     error: err.message || 'Internal server error',
     details: process.env.NODE_ENV === 'development' ? err.stack : undefined
   });
