@@ -1,31 +1,24 @@
-# Node modules
-node_modules
+# Android
+build/
+android/app/build/
+android/build/
+*.apk
+*.aar
+*.jks
+*.keystore
 
-# Environment
+# Node
+node_modules/
+dist/
 .env
 
-# Builds
-build
-dist
-client/build
-
-# Temp files
-*.log
-tmp/
-uploads/
-server/uploads/
-server/public/
-
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
 # IDE
-.vscode
-.idea
-*.swp
-*.swo
-*~
-
-# Misc
-.cache
+.idea/
+.vscode/
+*.iml
+.gradle/
+local.properties
