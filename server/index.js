@@ -55,28 +55,38 @@ app.use((err, req, res, next) => {
 
 const https = require('https');
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3004;
 
-try {
-  const sslOptions = {
-    key: fs.readFileSync('G:\\NODEJS\\hnpssl\\private.key'),
-    cert: fs.readFileSync('G:\\NODEJS\\hnpssl\\certificate.crt'),
-    ca: fs.readFileSync('G:\\NODEJS\\hnpssl\\ca_bundle.crt')
-  };
+const startServer = () => {
+  try {
+    const keyPath = 'G:\\NODEJS\\hnpssl\\private.key';
+    const certPath = 'G:\\NODEJS\\hnpssl\\certificate.crt';
+    const caPath = 'G:\\NODEJS\\hnpssl\\ca_bundle.crt';
 
-  https.createServer(sslOptions, app).listen(PORT, () => {
-    console.log(`🚀 HTTPS Server running on port ${PORT}`);
-    console.log(`📁 Uploads directory: ${uploadsDir}`);
-    console.log(`🎬 FFmpeg path: ${process.env.FFMPEG_PATH}`);
-  });
-} catch (error) {
-  console.error('Failed to start HTTPS server:', error.message);
-  console.log('Falling back to HTTP...');
-  app.listen(PORT, () => {
-    console.log(`🚀 HTTP Server running on port ${PORT}`);
-    console.log(`📁 Uploads directory: ${uploadsDir}`);
-    console.log(`🎬 FFmpeg path: ${process.env.FFMPEG_PATH}`);
-  });
-}
+    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+      const sslOptions = {
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+        ca: fs.existsSync(caPath) ? fs.readFileSync(caPath) : undefined
+      };
+
+      https.createServer(sslOptions, app).listen(PORT, () => {
+        console.log(`🚀 HTTPS Server running on port ${PORT}`);
+        console.log(`📁 Uploads directory: ${uploadsDir}`);
+      });
+    } else {
+      throw new Error('SSL certificates not found');
+    }
+  } catch (error) {
+    console.log(`⚠️ SSL Setup failed: ${error.message}`);
+    console.log('Falling back to HTTP...');
+    app.listen(PORT, () => {
+      console.log(`🚀 HTTP Server running on port ${PORT}`);
+      console.log(`📁 Uploads directory: ${uploadsDir}`);
+    });
+  }
+};
+
+startServer();
 
 module.exports = app;
