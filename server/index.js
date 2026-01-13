@@ -56,6 +56,7 @@ app.use((err, req, res, next) => {
 const https = require('https');
 
 const PORT = process.env.PORT || 3004;
+const devflag = true;
 
 const startServer = () => {
   try {
@@ -63,7 +64,7 @@ const startServer = () => {
     const certPath = 'G:\\NODEJS\\hnpssl\\certificate.crt';
     const caPath = 'G:\\NODEJS\\hnpssl\\ca_bundle.crt';
 
-    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    if (fs.existsSync(keyPath) && fs.existsSync(certPath) && !devflag) {
       const sslOptions = {
         key: fs.readFileSync(keyPath),
         cert: fs.readFileSync(certPath),
