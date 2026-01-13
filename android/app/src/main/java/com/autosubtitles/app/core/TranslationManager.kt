@@ -19,7 +19,7 @@ class TranslationManager(private val context: Context) {
         texts: List<String>,
         sourceLang: String = TranslateLanguage.ENGLISH,
         targetLang: String = TranslateLanguage.VIETNAMESE
-    ): List<String> {
+    ): List<String> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val options = TranslatorOptions.Builder()
             .setSourceLanguage(sourceLang)
             .setTargetLanguage(targetLang)
@@ -29,12 +29,18 @@ class TranslationManager(private val context: Context) {
         
         // Ensure model is downloaded
         val conditions = DownloadConditions.Builder()
-            .requireWifi()
+            // Removed requireWifi() to allow download on mobile data for better ux during testing
             .build()
         
-        translator.downloadModelIfNeeded(conditions).await()
+        try {
+            translator.downloadModelIfNeeded(conditions).await()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // If download fails, we can't translate, return original texts
+            return@withContext texts
+        }
         
-        return texts.map { text ->
+        texts.map { text ->
             try {
                 translator.translate(text).await()
             } catch (e: Exception) {

@@ -7,24 +7,36 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7d5260)
+// Premium AI-centric Palette
+val PrimaryDeep = Color(0xFF673AB7)
+val PrimaryLight = Color(0xFF9575CD)
+val AccentTeal = Color(0xFF00BFA5)
+val BackgroundDark = Color(0xFF121212)
+val SurfaceDark = Color(0xFF1E1E1E)
+val TextPrimary = Color(0xFFFFFFFF)
+val TextSecondary = Color(0xFFAAAAAA)
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = PrimaryLight,
+    onPrimary = Color.Black,
+    secondary = AccentTeal,
+    onSecondary = Color.Black,
+    background = BackgroundDark,
+    surface = SurfaceDark,
+    onBackground = TextPrimary,
+    onSurface = TextPrimary,
+    tertiary = Color(0xFFFF4081)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = PrimaryDeep,
+    onPrimary = Color.White,
+    secondary = AccentTeal,
+    onSecondary = Color.White,
+    background = Color(0xFFF5F5F5),
+    surface = Color.White,
+    onBackground = Color.Black,
+    onSurface = Color.Black
 )
 
 @Composable

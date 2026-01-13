@@ -31,7 +31,7 @@ class WhisperEngine(private val context: Context) {
         // val output = whisper.transcribe(audioFile.path)
         // return parseWhisperOutput(output)
         
-        Thread.sleep(2000) // Simulate processing time
+        kotlinx.coroutines.delay(2000) // Simulate processing time
         result
     }
 

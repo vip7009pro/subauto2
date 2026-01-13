@@ -59,6 +59,9 @@ dependencies {
     // FFmpegKit (Community Fork - 16KB Page Size Support)
     implementation 'com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.1.1'
     
+    // Material Icons Extended
+    implementation 'androidx.compose.material:material-icons-extended'
+    
     // ML Kit Translation
     implementation 'com.google.mlkit:translate:17.0.1'
     

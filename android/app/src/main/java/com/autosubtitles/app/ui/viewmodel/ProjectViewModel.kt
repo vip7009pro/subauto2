@@ -53,19 +53,77 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             isProcessing = true
             try {
-                // 1. Extract audio (simplified: assuming we have a file path from Uri)
-                val videoFile = File(project.videoUri)
-                val audioFile = File(getApplication<Application>().cacheDir, "${project.id}.wav")
+                val videoFile = getLocalPathFromUri(project.videoUri) ?: return@launch
+                val cacheDir = getApplication<Application>().cacheDir
+                val audioFile = File(cacheDir, "${project.id}.wav")
                 
                 if (VideoProcessor.extractAudio(videoFile, audioFile)) {
-                    // 2. Transcribe
                     val subs = whisperEngine.transcribe(audioFile)
                     updateSubtitles(subs)
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             } finally {
                 isProcessing = false
             }
         }
+    }
+
+    fun startRendering() {
+        val project = currentProject ?: return
+        viewModelScope.launch {
+            isProcessing = true
+            try {
+                val cacheDir = getApplication<Application>().cacheDir
+                val subFile = File(cacheDir, "${project.id}.srt")
+                
+                val srtContent = project.subtitles.mapIndexed { i, sub ->
+                    "${i + 1}\n${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n${sub.text}\n"
+                }.joinToString("\n")
+                
+                subFile.writeText(srtContent)
+                
+                val videoFile = getLocalPathFromUri(project.videoUri) ?: return@launch
+                val outputFile = File(cacheDir, "rendered_${project.name}.mp4")
+                
+                if (VideoProcessor.renderSubtitles(videoFile, subFile, outputFile)) {
+                    // Success logic
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                isProcessing = false
+            }
+        }
+    }
+
+    private fun getLocalPathFromUri(uriString: String): File? {
+        val uri = android.net.Uri.parse(uriString)
+        if (uri.scheme == "file") return File(uri.path!!)
+        
+        val cacheDir = getApplication<Application>().cacheDir
+        val tempFile = File(cacheDir, "temp_video_${System.currentTimeMillis()}.mp4")
+        
+        return try {
+            getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            tempFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun formatSrtTime(seconds: Double): String {
+        val totalMs = (seconds * 1000).toLong()
+        val h = totalMs / 3600000
+        val m = (totalMs % 3600000) / 60000
+        val s = (totalMs % 60000) / 1000
+        val ms = totalMs % 1000
+        return String.format("%02d:%02d:%02d,%03d", h, m, s, ms)
     }
 
     fun translateSubtitles(targetLang: String) {

@@ -34,26 +34,28 @@ class MainActivity : ComponentActivity() {
                             projects = viewModel.projects,
                             onProjectClick = { viewModel.selectProject(it) },
                             onDeleteProject = { viewModel.deleteProject(it) },
-                            onAddProject = { 
-                                // Mock picking: In real app use ActivityResultLauncher for video/PICK
-                                viewModel.createProject("Sample Video", "/sdcard/video.mp4", 60000) 
+                            onAddProject = { name, uri -> 
+                                viewModel.createProject(name, uri, 0) 
                             }
                         )
                     } else {
                         SubtitleEditorScreen(
-                            videoUri = currentProject.videoUri,
-                            subtitles = currentProject.subtitles,
-                            onSubtitleChange = { index, text ->
+                            project = currentProject,
+                            isProcessing = viewModel.isProcessing,
+                            onSubtitleChange = { index: Int, text: String ->
                                 val updated = currentProject.subtitles.toMutableList()
                                 updated[index] = updated[index].copy(text = text)
                                 viewModel.updateSubtitles(updated)
                             },
-                            onRenderClick = { /* Handle render logic */ }
+                            onStyleChange = { style: com.autosubtitles.app.model.SubtitleStyle ->
+                                val updated = currentProject.subtitles.map { it.copy(style = style) }
+                                viewModel.updateSubtitles(updated)
+                            },
+                            onRenderClick = { viewModel.startRendering() },
+                            onBack = { viewModel.selectProject(null) },
+                            onTranscribeClick = { viewModel.startTranscription() },
+                            onTranslateClick = { lang: String -> viewModel.translateSubtitles(lang) }
                         )
-                        
-                        androidx.activity.compose.BackHandler {
-                            viewModel.selectProject(null)
-                        }
                     }
                 }
             }
