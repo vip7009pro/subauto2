@@ -56,7 +56,7 @@ app.use((err, req, res, next) => {
 const https = require('https');
 
 const PORT = process.env.PORT || 3004;
-const devflag = true;
+const devflag = false;
 
 const startServer = () => {
   try {
