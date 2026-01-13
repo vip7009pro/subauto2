@@ -215,22 +215,65 @@ const SubtitleEditor = ({
     setError(null);
 
     try {
-      const response = await api.post('/api/generate-subs', {
+      await api.post('/api/generate-subs', {
         jobId,
         language: sourceLang === 'auto' ? null : sourceLang,
         model: selectedModel
       });
-
-      setLocalSubtitles(response.data.subtitles);
-      onSubtitlesGenerated(response.data.subtitles);
-      onSubtitlesUpdated(response.data.subtitles);
+      // Start polling
+      startPolling();
     } catch (err) {
       console.error('Generate subtitles error:', err);
-      setError(err.response?.data?.error || 'Failed to generate subtitles');
-    } finally {
+      setError(err.response?.data?.error || 'Failed to start generation');
       setLoading(false);
     }
   };
+
+  const startPolling = () => {
+    setLoading(true);
+    const interval = setInterval(async () => {
+      try {
+        const response = await api.get(`/api/job/${jobId}`);
+        const { status, subtitles: generatedSubs, error: jobError } = response.data;
+
+        if (status === 'generated') {
+          clearInterval(interval);
+          setLocalSubtitles(generatedSubs);
+          onSubtitlesGenerated(generatedSubs);
+          onSubtitlesUpdated(generatedSubs);
+          setLoading(false);
+        } else if (status === 'error') {
+          clearInterval(interval);
+          setError(jobError || 'An error occurred during transcription');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+        clearInterval(interval);
+        setLoading(false);
+      }
+    }, 3000);
+  };
+
+  // Check initial state/restore session
+  useEffect(() => {
+    const checkJobStatus = async () => {
+        if (!jobId) return;
+        try {
+            const response = await api.get(`/api/job/${jobId}`);
+            const { status, subtitles: currentSubs } = response.data;
+            if (status === 'generating' || status === 'transcribing' || status === 'extracting_audio') {
+                startPolling();
+            } else if (currentSubs && localSubtitles.length === 0) {
+                setLocalSubtitles(currentSubs);
+                onSubtitlesUpdated(currentSubs);
+            }
+        } catch (e) {
+            console.error("Status check failed", e);
+        }
+    };
+    checkJobStatus();
+  }, [jobId]);
 
   const handleTranslate = async () => {
     if (localSubtitles.length === 0) {
@@ -391,13 +434,33 @@ const SubtitleEditor = ({
         subtitles: localSubtitles
       });
 
-      // Then render
-      const response = await api.post('/api/render', { jobId });
-      const downloadUrl = response.data.downloadUrl;
-      onRenderComplete(`${API_URL}${downloadUrl}`);
+      // Then start render
+      await api.post('/api/render', { jobId });
+      
+      // Start polling for render status
+      const interval = setInterval(async () => {
+        try {
+          const response = await api.get(`/api/job/${jobId}`);
+          const { status, downloadUrl, error: jobError } = response.data;
+
+          if (status === 'completed' && downloadUrl) {
+            clearInterval(interval);
+            onRenderComplete(`${API_URL}${downloadUrl}`);
+            setRendering(false);
+          } else if (status === 'error') {
+            clearInterval(interval);
+            setError(jobError || 'Rendering failed');
+            setRendering(false);
+          }
+        } catch (err) {
+          clearInterval(interval);
+          setRendering(false);
+        }
+      }, 5000);
+
     } catch (err) {
       console.error('Render error:', err);
-      setError(err.response?.data?.error || 'Failed to render video');
+      setError(err.response?.data?.error || 'Failed to start rendering');
       setRendering(false);
     }
   };

@@ -38,8 +38,13 @@ const upload = multer({
   }
 });
 
-// Store for processing jobs (in production, use Redis or database)
-const jobs = new Map();
+const { 
+  jobs, 
+  processTranscription, 
+  processRendering, 
+  cleanupJobFiles, 
+  updateJob 
+} = require('../utils/jobProcessor');
 
 /**
  * POST /api/upload
@@ -55,7 +60,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     const videoPath = req.file.path;
     const duration = await getVideoDuration(videoPath);
 
-    jobs.set(jobId, {
+    updateJob(jobId, {
       videoPath,
       videoName: req.file.originalname,
       duration,
@@ -70,7 +75,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
       duration
     });
 
-    // Cleanup old files
+    // Cleanup old files (periodically)
     cleanupOldFiles(path.join(__dirname, '../uploads'), 24);
   } catch (error) {
     console.error('Upload error:', error);
@@ -80,141 +85,33 @@ router.post('/upload', upload.single('video'), async (req, res) => {
 
 /**
  * POST /api/generate-subs
- * Generate subtitles from video using Whisper AI
+ * Start generation in background
  */
 router.post('/generate-subs', async (req, res) => {
   try {
-    const { jobId, language } = req.body;
+    const { jobId, language, model } = req.body;
 
     if (!jobId || !jobs.has(jobId)) {
       return res.status(400).json({ error: 'Invalid job ID' });
     }
 
-    const job = jobs.get(jobId);
-    job.status = 'generating';
-
-    // Extract audio from video
-    const audioPath = path.join(__dirname, '../uploads', `${uuidv4()}.wav`);
-    await extractAudio(job.videoPath, audioPath);
-
-    const modelName = req.body.model || 'Xenova/whisper-small';
-    console.log(`Generating subtitles using model: ${modelName} for language: ${language || 'auto-detect'}`);
-
-    // Read WAV file data
-    const { WaveFile } = require('wavefile');
-    const wavBuffer = fs.readFileSync(audioPath);
-    const wav = new WaveFile(wavBuffer);
-    
-    // Convert to 32-bit float (normalized to -1.0 to 1.0)
-    wav.toBitDepth('32f');
-    
-    // Get samples
-    let audioData = wav.getSamples(false, Float32Array);
-    
-    // Handle mono/stereo: if array of arrays (channels), take first channel
-    if (Array.isArray(audioData)) {
-      if (audioData.length > 0) {
-        audioData = audioData[0];
-      } else {
-        throw new Error('No audio channels found');
-      }
-    }
-    
-    // Ensure it's Float32Array
-    if (!(audioData instanceof Float32Array)) {
-      audioData = new Float32Array(audioData);
-    }
-    
-    const sampleRate = wav.fmt.sampleRate;
-
-    console.log(`Audio loaded: ${audioData.length} samples at ${sampleRate}Hz (Running Whisper...)`);
-
-    // Use Whisper for transcription
-    console.log(`Loading Whisper model (${modelName})... this may take a moment`);
-    const transcriber = await pipeline(
-      'automatic-speech-recognition',
-      modelName
-    );
-
-    const result = await transcriber(audioData, {
-      language: language && language !== 'auto' ? language : null,
-      task: 'transcribe',
-      chunk_length_s: 30,
-      stride_length_s: 5,
-      return_timestamps: true
-    });
-
-    // Clean up audio file
-    fs.unlinkSync(audioPath);
-
-    console.log('Transcription result:', result);
-
-    // Convert Whisper output to subtitle format
-    const subtitles = [];
-    
-    if (result.chunks && result.chunks.length > 0) {
-      result.chunks.forEach((chunk, index) => {
-        if (chunk.text && chunk.text.trim()) {
-          // Handle potentially null timestamps
-          const start = chunk.timestamp && chunk.timestamp[0] !== null 
-            ? chunk.timestamp[0] 
-            : (index > 0 ? subtitles[index-1].end : 0);
-            
-          const end = chunk.timestamp && chunk.timestamp[1] !== null 
-            ? chunk.timestamp[1] 
-            : start + 2; // Default duration 2s if missing
-
-          subtitles.push({
-            start: Number(start).toFixed(3),
-            end: Number(end).toFixed(3),
-            text: chunk.text.trim(),
-            style: {
-              textColor: '#FFFFFF',
-              bgColor: '#000000',
-              strokeColor: '#000000',
-              strokeWidth: 2,
-              bgOpaque: false,
-              bgOpacity: 0.5,
-              fontSize: 48
-            }
-          });
-        }
-      });
-    } else {
-      // Fallback: create subtitle from full text
-      subtitles.push({
-        start: '0.000',
-        end: job.duration.toFixed(3),
-        text: result.text || 'No speech detected',
-        style: {
-          textColor: '#FFFFFF',
-          bgColor: '#000000',
-          strokeColor: '#000000',
-          strokeWidth: 2,
-          bgOpaque: false,
-          bgOpacity: 0.5,
-          fontSize: 48
-        }
-      });
-    }
-
-    job.subtitles = subtitles;
-    job.status = 'generated';
+    // Start processing in background (don't await)
+    processTranscription(jobId, language, model);
 
     res.json({
       jobId,
-      subtitles,
-      detectedLanguage: language || 'auto'
+      message: 'Transcription started in background',
+      status: 'generating'
     });
   } catch (error) {
-    console.error('Generate subtitles error:', error);
+    console.error('Generate subs error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * POST /api/translate
- * Translate subtitles to target language
+ * Translate subtitles (Synchronous for now, but updates job)
  */
 router.post('/translate', async (req, res) => {
   try {
@@ -224,67 +121,40 @@ router.post('/translate', async (req, res) => {
       return res.status(400).json({ error: 'Invalid job ID' });
     }
 
-    if (!targetLanguage) {
-      return res.status(400).json({ error: 'Target language is required' });
-    }
-
-    const subsToTranslate = subtitles || jobs.get(jobId).subtitles;
+    const job = jobs.get(jobId);
+    const subsToTranslate = subtitles || job.subtitles;
 
     if (!subsToTranslate || subsToTranslate.length === 0) {
       return res.status(400).json({ error: 'No subtitles to translate' });
     }
 
-    console.log(`Translating ${subsToTranslate.length} subtitles to ${targetLanguage} in batches...`);
-
-    // Batch translation (Context-Aware)
-    // Group subtitles into chunks to provide context to the translator
-    // Using 50 lines per chunk or ~5000 chars max
     const CHUNK_SIZE = 50; 
     const batches = [];
-    
     for (let i = 0; i < subsToTranslate.length; i += CHUNK_SIZE) {
       batches.push(subsToTranslate.slice(i, i + CHUNK_SIZE));
     }
 
     const translatedSubs = [];
-    
     for (const batch of batches) {
       try {
-        // Join text with a delimiter not likely to be used in normal text
-        // Using " <<<BR>>> " as delimiter
         const delimiter = " <<<BR>>> ";
         const textToTranslate = batch.map(s => s.text).join(delimiter);
-        
         const result = await translate(textToTranslate, { to: targetLanguage });
-        
-        // Split back
-        // Use regex to split, handling potential whitespace variations from translation
         const translatedTexts = result.text.split(/\s*<<<BR>>>\s*/);
 
-        // Assign back to subtitles
         batch.forEach((sub, index) => {
-          let transText = translatedTexts[index];
-          // Fallback if split count doesn't match (rare but possible)
-          if (!transText) transText = sub.text; 
-          
           translatedSubs.push({
             ...sub,
-            text: transText.trim()
+            text: (translatedTexts[index] || sub.text).trim()
           });
         });
-        
-        // Add small delay to respect rate limits (if any)
-        await new Promise(r => setTimeout(r, 200));
-        
+        await new Promise(r => setTimeout(r, 100));
       } catch (err) {
-        console.error('Batch translation error:', err);
-        // Fallback: keep original or try individual
         batch.forEach(sub => translatedSubs.push(sub));
       }
     }
 
-    const job = jobs.get(jobId);
-    job.subtitles = translatedSubs;
+    updateJob(jobId, { subtitles: translatedSubs });
 
     res.json({
       jobId,
@@ -292,43 +162,13 @@ router.post('/translate', async (req, res) => {
       targetLanguage
     });
   } catch (error) {
-    console.error('Translate error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * POST /api/update-subs
- * Update subtitle data (after editing)
- */
-router.post('/update-subs', async (req, res) => {
-  try {
-    const { jobId, subtitles } = req.body;
-
-    if (!jobId || !jobs.has(jobId)) {
-      return res.status(400).json({ error: 'Invalid job ID' });
-    }
-
-    if (!subtitles || !Array.isArray(subtitles)) {
-      return res.status(400).json({ error: 'Invalid subtitles data' });
-    }
-
-    const job = jobs.get(jobId);
-    job.subtitles = subtitles;
-
-    res.json({
-      jobId,
-      message: 'Subtitles updated successfully'
-    });
-  } catch (error) {
-    console.error('Update subtitles error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * POST /api/render
- * Render video with burned-in subtitles
+ * Start rendering in background
  */
 router.post('/render', async (req, res) => {
   try {
@@ -338,93 +178,61 @@ router.post('/render', async (req, res) => {
       return res.status(400).json({ error: 'Invalid job ID' });
     }
 
-    const job = jobs.get(jobId);
-
-    if (!job.subtitles || job.subtitles.length === 0) {
-      return res.status(400).json({ error: 'No subtitles to render' });
-    }
-
-    job.status = 'rendering';
-
-    // Generate ASS file from subtitles
-    const assContent = toASS(job.subtitles);
-    const assPath = path.join(__dirname, '../uploads', `${uuidv4()}.ass`);
-    fs.writeFileSync(assPath, assContent, 'utf8');
-
-    // Render video
-    const outputPath = path.join(
-      __dirname,
-      '../uploads',
-      `rendered_${uuidv4()}${path.extname(job.videoPath)}`
-    );
-
-    await renderVideoWithSubtitles(job.videoPath, assPath, outputPath);
-
-    // Clean up ASS file
-    fs.unlinkSync(assPath);
-
-    job.status = 'completed';
-    job.renderedPath = outputPath;
+    // Start processing in background
+    processRendering(jobId);
 
     res.json({
       jobId,
-      downloadUrl: `/api/download/${path.basename(outputPath)}`,
-      filename: `rendered_${job.videoName}`
+      message: 'Rendering started in background',
+      status: 'rendering'
     });
   } catch (error) {
-    console.error('Render error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * GET /api/download/:filename
- * Download rendered video
- */
-router.get('/download/:filename', (req, res) => {
-  try {
-    const filename = req.params.filename;
-    const filePath = path.join(__dirname, '../uploads', filename);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    res.download(filePath, filename, (err) => {
-      if (err) {
-        console.error('Download error:', err);
-        res.status(500).json({ error: 'Error downloading file' });
-      }
-    });
-  } catch (error) {
-    console.error('Download error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * GET /api/job/:jobId
- * Get job status
+ * Detailed job status
  */
 router.get('/job/:jobId', (req, res) => {
   try {
     const jobId = req.params.jobId;
+    const job = jobs.get(jobId);
 
-    if (!jobs.has(jobId)) {
+    if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
-
-    const job = jobs.get(jobId);
 
     res.json({
       jobId,
       status: job.status,
       videoName: job.videoName,
       duration: job.duration,
-      hasSubtitles: !!job.subtitles
+      subtitles: job.subtitles,
+      renderedPath: job.renderedPath ? path.basename(job.renderedPath) : null,
+      downloadUrl: job.renderedPath ? `/api/download/${path.basename(job.renderedPath)}` : null,
+      error: job.error
     });
   } catch (error) {
-    console.error('Job status error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/project/:jobId
+ * Delete project and associated files
+ */
+router.delete('/project/:jobId', (req, res) => {
+  try {
+    const jobId = req.params.jobId;
+    if (!jobs.has(jobId)) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    cleanupJobFiles(jobId);
+    res.json({ message: 'Project and files deleted successfully' });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

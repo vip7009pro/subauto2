@@ -16,6 +16,7 @@ import ProjectList from './components/ProjectList';
 import UploadComponent from './components/UploadComponent';
 import SubtitleEditor from './components/SubtitleEditor';
 import RenderComponent from './components/RenderComponent';
+import api from './api/config';
 
 const theme = createTheme({
   palette: {
@@ -152,8 +153,20 @@ function App() {
     loadProject(newProject);
   };
 
-  const handleDeleteProject = (projectId) => {
-    if (window.confirm('Are you sure you want to delete this project?')) {
+  const handleDeleteProject = async (projectId) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    if (window.confirm('Are you sure you want to delete this project? All associated files will be removed from the server.')) {
+        try {
+            // Delete files on server if jobId exists
+            if (project.jobId) {
+                await api.delete(`/api/project/${project.jobId}`);
+            }
+        } catch (e) {
+            console.error("Cleanup failed", e);
+        }
+
         setProjects(prev => prev.filter(p => p.id !== projectId));
         if (currentProject && currentProject.id === projectId) {
             handleBackToHome();

@@ -7,7 +7,7 @@
         "server": "cd server & npx nodemon index.js",
         "client": "cd client & yarn start",
         "install-all": "yarn install && cd client && yarn install && cd ../server && yarn install",
-        "build": "cd client && yarn run build && rimraf server/public && xcopy /E /I /Y client\\build server\\public"
+        "build": "cd client && yarn run build && cd .. && rimraf server/public && xcopy /E /I /Y client\\build server\\public"
     },
     "keywords": [
         "subtitles",
