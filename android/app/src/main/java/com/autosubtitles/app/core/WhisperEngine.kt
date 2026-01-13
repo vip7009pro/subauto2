@@ -12,36 +12,24 @@ import java.io.File
  */
 class WhisperEngine(private val context: Context) {
 
+    private val processor = WhisperProcessor(context)
+
     /**
      * Transcribes a WAV audio file into subtitle chunks.
      */
-    suspend fun transcribe(audioFile: File): List<SubtitleItem> = withContext(Dispatchers.Default) {
-        // NOTE: In a production app, you would use a JNI wrapper for whisper.cpp 
-        // or a TFLite Interpreter with the Whisper TFLite model.
-        
-        // Simulating transcription for demonstration
-        val result = mutableListOf<SubtitleItem>()
-        
-        // Simulated chunks
-        result.add(SubtitleItem(start = 0.5, end = 3.0, text = "Hello and welcome to this video."))
-        result.add(SubtitleItem(start = 3.5, end = 6.0, text = "This is a native offline transcription test."))
-        
-        // In real implementation:
-        // val whisper = WhisperLib.init(modelPath)
-        // val output = whisper.transcribe(audioFile.path)
-        // return parseWhisperOutput(output)
-        
-        kotlinx.coroutines.delay(2000) // Simulate processing time
-        result
-    }
-
-    /**
-     * Logic to load the Whisper model from assets if not present in files.
-     */
-    fun ensureModelReady() {
-        val modelFile = File(context.filesDir, "whisper-small-en.tflite")
+    suspend fun transcribe(audioFile: File, modelPath: String): List<SubtitleItem> = withContext(Dispatchers.Default) {
+        val modelFile = File(modelPath)
         if (!modelFile.exists()) {
-            // copyFromAssets("whisper-small-en.tflite", modelFile)
+            return@withContext listOf(
+                SubtitleItem(start = 0.5, end = 5.0, text = "Model file not found. Please download it first.")
+            )
+        }
+
+        if (processor.loadModel(modelFile.absolutePath)) {
+            val text = processor.transcribe(FloatArray(0))
+            listOf(SubtitleItem(start = 0.5, end = 5.0, text = text))
+        } else {
+            listOf(SubtitleItem(start = 0.5, end = 5.0, text = "Error loading AI Model."))
         }
     }
 }

@@ -25,3 +25,8 @@ data class Project(
     val subtitles: List<SubtitleItem> = emptyList(),
     val createdAt: Long = System.currentTimeMillis()
 )
+
+enum class AiModel(val displayName: String, val fileName: String, val url: String, val sizeMb: Int) {
+    TINY("Whisper Tiny (Fastest)", "whisper-tiny.tflite", "https://huggingface.co/RedHatAI/whisper-tiny-quantized.w8a8/resolve/main/whisper-tiny-quantized.tflite", 40),
+    SMALL("Whisper Small (Precise)", "whisper-small.tflite", "https://huggingface.co/DocWolle/whisper_tflite_models/resolve/main/whisper-small.tflite", 388)
+}

@@ -54,7 +54,14 @@ class MainActivity : ComponentActivity() {
                             onRenderClick = { viewModel.startRendering() },
                             onBack = { viewModel.selectProject(null) },
                             onTranscribeClick = { viewModel.startTranscription() },
-                            onTranslateClick = { lang: String -> viewModel.translateSubtitles(lang) }
+                            onTranslateClick = { lang: String -> viewModel.translateSubtitles(lang) },
+                            lastRenderedPath = viewModel.lastRenderedPath,
+                            onClearRenderedPath = { viewModel.clearLastRenderedPath() },
+                            selectedModel = viewModel.selectedModel,
+                            onModelSelect = { viewModel.setModel(it) },
+                            isModelDownloaded = { viewModel.isModelDownloaded(it) },
+                            onDownloadModel = { viewModel.downloadModel(it) },
+                            modelDownloadProgress = viewModel.modelDownloadProgress
                         )
                     }
                 }

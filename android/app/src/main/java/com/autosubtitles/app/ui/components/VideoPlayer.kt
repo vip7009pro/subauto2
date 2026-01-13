@@ -17,7 +17,7 @@ import androidx.media3.ui.PlayerView
 
 @OptIn(UnstableApi::class)
 @Composable
-fun VideoPlayer(videoUri: String) {
+fun VideoPlayer(videoUri: String, seekPosition: Double? = null) {
     val context = LocalContext.current
     
     val exoPlayer = remember {
@@ -27,21 +27,29 @@ fun VideoPlayer(videoUri: String) {
         }
     }
 
-    DisposableEffect(
-        AndroidView(
-            factory = {
-                PlayerView(it).apply {
-                    player = exoPlayer
-                    useController = true
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(250.dp)
-        )
-    ) {
+    // Handle seeking when seekPosition changes
+    androidx.compose.runtime.LaunchedEffect(seekPosition) {
+        seekPosition?.let {
+            exoPlayer.seekTo((it * 1000).toLong())
+            exoPlayer.play()
+        }
+    }
+
+    DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
         }
     }
+
+    AndroidView(
+        factory = {
+            PlayerView(it).apply {
+                player = exoPlayer
+                useController = true
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(250.dp)
+    )
 }

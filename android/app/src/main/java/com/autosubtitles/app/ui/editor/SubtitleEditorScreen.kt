@@ -2,6 +2,7 @@ package com.autosubtitles.app.ui.editor
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -27,15 +28,46 @@ fun SubtitleEditorScreen(
     onRenderClick: () -> Unit,
     onBack: () -> Unit,
     onTranscribeClick: () -> Unit = {},
-    onTranslateClick: (String) -> Unit = {}
+    onTranslateClick: (String) -> Unit = {},
+    lastRenderedPath: String? = null,
+    onClearRenderedPath: () -> Unit = {},
+    selectedModel: com.autosubtitles.app.model.AiModel = com.autosubtitles.app.model.AiModel.TINY,
+    onModelSelect: (com.autosubtitles.app.model.AiModel) -> Unit = {},
+    isModelDownloaded: (com.autosubtitles.app.model.AiModel) -> Boolean = { true },
+    onDownloadModel: (com.autosubtitles.app.model.AiModel) -> Unit = {},
+    modelDownloadProgress: Float? = null
 ) {
     var showStyleDialog by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
+    var seekPosition by remember { mutableStateOf<Double?>(null) }
+
+    if (showModelDialog) {
+        ModelSelectionDialog(
+            selectedModel = selectedModel,
+            onModelSelect = onModelSelect,
+            isDownloaded = isModelDownloaded,
+            onDownload = onDownloadModel,
+            downloadProgress = modelDownloadProgress,
+            onDismiss = { showModelDialog = false }
+        )
+    }
 
     if (showStyleDialog) {
         StyleDialog(
             currentStyle = project.subtitles.firstOrNull()?.style ?: com.autosubtitles.app.model.SubtitleStyle(),
             onStyleChange = onStyleChange,
             onDismiss = { showStyleDialog = false }
+        )
+    }
+
+    if (lastRenderedPath != null) {
+        AlertDialog(
+            onDismissRequest = onClearRenderedPath,
+            title = { Text("Export Successful") },
+            text = { Text("Video has been saved to your Movies folder.") },
+            confirmButton = {
+                Button(onClick = onClearRenderedPath) { Text("OK") }
+            }
         )
     }
 
@@ -47,6 +79,12 @@ fun SubtitleEditorScreen(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
                 },
                 actions = {
+                    IconButton(onClick = { showModelDialog = true }) { 
+                        Icon(
+                            if (isModelDownloaded(selectedModel)) Icons.Default.CloudDone else Icons.Default.CloudDownload, 
+                            "Models"
+                        ) 
+                    }
                     IconButton(onClick = { showStyleDialog = true }) { Icon(Icons.Default.Palette, "Style") }
                     IconButton(onClick = onTranscribeClick) { Icon(Icons.Default.AutoFixHigh, "Transcribe") }
                     IconButton(onClick = { onTranslateClick("vi") }) { Icon(Icons.Default.Translate, "Translate") }
@@ -70,7 +108,10 @@ fun SubtitleEditorScreen(
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Video Player Section
             Box(modifier = Modifier.fillMaxWidth().height(240.dp).background(Color.Black)) {
-                com.autosubtitles.app.ui.components.VideoPlayer(videoUri = project.videoUri)
+                com.autosubtitles.app.ui.components.VideoPlayer(
+                    videoUri = project.videoUri,
+                    seekPosition = seekPosition
+                )
             }
 
             // Processing state
@@ -90,7 +131,7 @@ fun SubtitleEditorScreen(
                     }
                 } else {
                     itemsIndexed(project.subtitles) { index, item ->
-                        SubtitleRow(item) { newText ->
+                        SubtitleRow(item, onClick = { seekPosition = item.start }) { newText ->
                             onSubtitleChange(index, newText)
                         }
                     }
@@ -101,9 +142,9 @@ fun SubtitleEditorScreen(
 }
 
 @Composable
-fun SubtitleRow(item: SubtitleItem, onTextChange: (String) -> Unit) {
+fun SubtitleRow(item: SubtitleItem, onClick: () -> Unit, onTextChange: (String) -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {

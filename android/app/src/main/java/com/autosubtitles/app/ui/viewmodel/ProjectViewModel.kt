@@ -19,6 +19,7 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
     private val repository = ProjectRepository(application)
     private val whisperEngine = WhisperEngine(application)
     private val translationManager = TranslationManager(application)
+    private val downloader = com.autosubtitles.app.core.ModelDownloader(application)
     
     var projects by mutableStateOf<List<Project>>(emptyList())
         private set
@@ -29,8 +30,36 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
     var isProcessing by mutableStateOf(false)
         private set
 
+    var lastRenderedPath by mutableStateOf<String?>(null)
+        private set
+
+    var selectedModel by mutableStateOf(repository.getSelectedModel())
+        private set
+
+    var modelDownloadProgress by mutableStateOf<Float?>(null)
+        private set
+
     init {
         loadProjects()
+    }
+
+    fun isModelDownloaded(model: com.autosubtitles.app.model.AiModel): Boolean {
+        return downloader.isDownloaded(model)
+    }
+
+    fun setModel(model: com.autosubtitles.app.model.AiModel) {
+        selectedModel = model
+        repository.setSelectedModel(model)
+    }
+
+    fun downloadModel(model: com.autosubtitles.app.model.AiModel) {
+        viewModelScope.launch {
+            modelDownloadProgress = 0f
+            val success = downloader.download(model) { progress ->
+                modelDownloadProgress = progress
+            }
+            modelDownloadProgress = null
+        }
     }
 
     fun loadProjects() {
@@ -58,7 +87,8 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
                 val audioFile = File(cacheDir, "${project.id}.wav")
                 
                 if (VideoProcessor.extractAudio(videoFile, audioFile)) {
-                    val subs = whisperEngine.transcribe(audioFile)
+                    val modelPath = File(getApplication<Application>().filesDir, selectedModel.fileName).absolutePath
+                    val subs = whisperEngine.transcribe(audioFile, modelPath)
                     updateSubtitles(subs)
                 }
             } catch (e: Exception) {
@@ -87,7 +117,8 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
                 val outputFile = File(cacheDir, "rendered_${project.name}.mp4")
                 
                 if (VideoProcessor.renderSubtitles(videoFile, subFile, outputFile)) {
-                    // Success logic
+                    saveVideoToGallery(outputFile, "AutoSub_${project.name}_${System.currentTimeMillis()}.mp4")
+                    lastRenderedPath = outputFile.absolutePath
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -95,6 +126,30 @@ class ProjectViewModel(application: Application) : AndroidViewModel(application)
                 isProcessing = false
             }
         }
+    }
+
+    private fun saveVideoToGallery(videoFile: File, fileName: String) {
+        val context = getApplication<Application>()
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, fileName)
+            put(android.provider.MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/AutoSubtitles")
+            }
+        }
+
+        val uri = context.contentResolver.insert(android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+        uri?.let {
+            context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                videoFile.inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        }
+    }
+
+    fun clearLastRenderedPath() {
+        lastRenderedPath = null
     }
 
     private fun getLocalPathFromUri(uriString: String): File? {

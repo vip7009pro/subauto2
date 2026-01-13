@@ -43,6 +43,10 @@ android {
         resources {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
+        jniLibs {
+            pickFirsts += '**/libtensorflowlite_jni.so'
+            pickFirsts += '**/libtensorflowlite_select_tf_ops.so'
+        }
     }
 }
 
@@ -65,8 +69,9 @@ dependencies {
     // ML Kit Translation
     implementation 'com.google.mlkit:translate:17.0.1'
     
-    // Whisper TFLite (Assuming we use a common binding or will implement one via JNI/lib)
-    // implementation 'org.tensorflow:tensorflow-lite:2.13.0'
+    // TensorFlow Lite
+    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
+    implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0'
     
     // ExoPlayer (Media3)
     implementation 'androidx.media3:media3-exoplayer:1.1.1'

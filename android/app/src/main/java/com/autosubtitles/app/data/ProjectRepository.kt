@@ -39,4 +39,16 @@ class ProjectRepository(private val context: Context) {
         val projects = getAllProjects().filter { it.id != projectId }
         projectsFile.writeText(gson.toJson(projects))
     }
+
+    // Model Preferences
+    private val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+    fun getSelectedModel(): com.autosubtitles.app.model.AiModel {
+        val name = prefs.getString("selected_model", com.autosubtitles.app.model.AiModel.TINY.name)
+        return com.autosubtitles.app.model.AiModel.valueOf(name!!)
+    }
+
+    fun setSelectedModel(model: com.autosubtitles.app.model.AiModel) {
+        prefs.edit().putString("selected_model", model.name).apply()
+    }
 }
